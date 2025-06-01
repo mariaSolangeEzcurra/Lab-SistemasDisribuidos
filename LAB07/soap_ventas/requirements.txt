@@ -1,0 +1,4 @@
+spyne
+werkzeug
+lxml
+zeep
