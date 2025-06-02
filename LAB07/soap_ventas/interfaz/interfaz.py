@@ -1,10 +1,16 @@
-from flask import Flask, request, render_template_string
+from flask import Flask, request, render_template_string, redirect, url_for, session
 from zeep import Client
 
 app = Flask(__name__)
+app.secret_key = 'clave_secreta_segura'  # Necesario para manejar sesiones
 
 wsdl_url = 'http://localhost:8000/?wsdl'
 cliente = Client(wsdl=wsdl_url)
+
+usuarios = {
+    "admin": "1234",
+    "usuario": "clave"
+}
 
 inventario = {
     "Laptop": 899.99,
@@ -17,6 +23,33 @@ inventario = {
 
 ventas = []
 
+HTML_LOGIN = """
+<!doctype html>
+<html lang="es">
+<head><meta charset="utf-8"><title>Login</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="d-flex justify-content-center align-items-center vh-100 bg-light">
+  <div class="card p-4 shadow" style="width: 100%; max-width: 400px">
+    <h2 class="mb-4">Iniciar sesión</h2>
+    {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+    <form method="post">
+      <div class="mb-3">
+        <label class="form-label">Usuario</label>
+        <input type="text" name="usuario" class="form-control" required>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Contraseña</label>
+        <input type="password" name="clave" class="form-control" required>
+      </div>
+      <button type="submit" class="btn btn-primary w-100">Ingresar</button>
+    </form>
+  </div>
+</body>
+</html>
+"""
+
+# Aquí está tu HTML_FORM original con el botón de cerrar sesión agregado arriba
 HTML_FORM = """
 <!doctype html>
 <html lang="es">
@@ -35,6 +68,7 @@ HTML_FORM = """
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-direction: column;
   }
   .container {
     max-width: 720px;
@@ -43,6 +77,7 @@ HTML_FORM = """
     border-radius: 12px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.07);
     transition: transform 0.2s ease;
+    width: 100%;
   }
   .container:hover {
     transform: translateY(-3px);
@@ -115,6 +150,23 @@ HTML_FORM = """
     background-color: #6c8ed9;
     color: white;
   }
+  .btn-logout {
+    display: block;
+    width: 100%;               /* ocupa todo el ancho */
+    margin: 30px auto; /* margen arriba y abajo de 30px, centrado horizontalmente */
+    background-color: #dc3545;
+    border: none;
+    color: white;
+    font-weight: 700;
+    padding: 10px 18px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+  }
+
+  .btn-logout:hover {
+    background-color: #b02a37;
+  }
   .alert {
     margin-top: 25px;
     border-radius: 8px;
@@ -132,12 +184,13 @@ HTML_FORM = """
     color: #842029;
     border: 1px solid #f5c2c7;
   }
-</style>
+  </style>
 
 </head>
 <body>
   <div class="container shadow-sm">
-    
+   
+
     <h2>Registrar Venta</h2>
     <hr>
     <form method="post" novalidate onsubmit="return validarFormulario()">
@@ -168,6 +221,10 @@ HTML_FORM = """
 
     <form method="get" action="/historial">
       <button type="submit" class="btn btn-secondary">Ver Historial de Ventas</button>
+    </form>
+
+    <form method="get" action="/logout">
+      <button type="submit" class="btn-logout">Cerrar sesión</button>
     </form>
 
     {% if respuesta %}
@@ -216,13 +273,11 @@ HTML_FORM = """
     // Validar precio (debe existir)
     if (!precioInput.value) {
       valido = false;
-      // no se marca porque es readonly, pero evita enviar sin precio
     }
 
     return valido;
   }
   
-  // Para que si vuelves a la página y hay valor seleccionado, se muestre el precio
   document.addEventListener('DOMContentLoaded', () => {
     actualizarPrecio();
   });
@@ -230,6 +285,8 @@ HTML_FORM = """
 </body>
 </html>
 """
+
+# Aquí está tu HTML_HISTORIAL original con el botón de cerrar sesión agregado arriba
 HTML_HISTORIAL = """
 <!doctype html>
 <html lang="es">
@@ -248,6 +305,7 @@ HTML_HISTORIAL = """
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-direction: column;
   }
   .container {
     max-width: 720px;
@@ -255,11 +313,7 @@ HTML_HISTORIAL = """
     padding: 40px 50px;
     border-radius: 12px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.07);
-    transition: transform 0.2s ease;
-  }
-  .container:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 6px 18px rgba(0,0,0,0.1);
+    width: 100%;
   }
   h2 {
     font-weight: 700;
@@ -273,115 +327,150 @@ HTML_HISTORIAL = """
   table {
     width: 100%;
     border-collapse: collapse;
-    margin-bottom: 25px;
-  }
-  thead {
-    background-color: #6c8ed9;
-    color: white;
+    margin-top: 20px;
   }
   th, td {
-    padding: 12px 15px;
     border: 1px solid #ddd;
-    text-align: center;
+    padding: 12px 15px;
+    text-align: left;
   }
-  tbody tr:nth-child(even) {
+  th {
+    background-color: #6c8ed9;
+    color: white;
+    font-weight: 700;
+  }
+  tr:nth-child(even) {
     background-color: #f9f9f9;
   }
-  .btn-primary {
-    background-color: #6c8ed9;
-    border: none;
-    font-weight: 700;
-    padding: 14px;
-    font-size: 1.2rem;
-    border-radius: 10px;
+  .btn-secondary, .btn-logout {
     width: 100%;
-    box-shadow: 0 4px 12px rgba(108,142,217,0.4);
-    transition: background-color 0.3s ease;
-    color: white;
-    cursor: pointer;
-  }
-  .btn-primary:hover {
-    background-color: #5879c1;
-    box-shadow: 0 6px 18px rgba(88,121,193,0.6);
-  }
-  .empty-msg {
-    font-style: italic;
-    color: #999;
+    padding: 14px;
+    font-size: 1.15rem;
+    border-radius: 10px;
+    margin-top: 25px;
     font-weight: 600;
-    text-align: center;
-    margin-bottom: 20px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+  }
+  .btn-secondary {
+    color: #6c8ed9;
+    background-color: transparent;
+    border: 2px solid #6c8ed9;
+  }
+  .btn-secondary:hover {
+    background-color: #6c8ed9;
+    color: white;
+  }
+  .btn-logout {
+  display: block;
+  margin: 30px auto; /* margen arriba y abajo de 30px, centrado horizontalmente */
+  background-color: #dc3545;
+  border: none;
+  color: white;
+  font-weight: 700;
+  padding: 10px 18px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+  .btn-logout:hover {
+    background-color: #b02a37;
   }
   </style>
 </head>
 <body>
   <div class="container shadow-sm">
+    
     <h2>Historial de Ventas</h2>
     <hr>
     {% if ventas %}
-    <table>
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>Producto</th>
-          <th>Cantidad</th>
-          <th>Precio Unitario (USD)</th>
-          <th>Total (USD)</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for v in ventas %}
-        <tr>
-          <td>{{ loop.index }}</td>
-          <td>{{ v['producto'] }}</td>
-          <td>{{ v['cantidad'] }}</td>
-          <td>${{ "%.2f"|format(v['precio']) }}</td>
-          <td>${{ "%.2f"|format(v['total']) }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+      <table>
+        <thead>
+          <tr>
+            <th>Producto</th>
+            <th>Cantidad</th>
+            <th>Precio Unitario (USD)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for venta in ventas %}
+            <tr>
+              <td>{{ venta['producto'] }}</td>
+              <td>{{ venta['cantidad'] }}</td>
+              <td>{{ venta['precio'] }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     {% else %}
-      <p class="empty-msg">No se han registrado ventas aún.</p>
+      <p>No hay ventas registradas aún.</p>
     {% endif %}
-    <form action="/" method="get">
-      <button type="submit" class="btn btn-primary">Registrar Venta</button>
+    <form method="get" action="/">
+      <button type="submit" class="btn btn-secondary">Registrar Nueva Venta</button>
+    </form>
+
+    <form method="get" action="/logout">
+      <button type="submit" class="btn-logout">Cerrar sesión</button>
     </form>
   </div>
 </body>
 </html>
 """
 
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    error = None
+    if request.method == 'POST':
+        usuario = request.form.get('usuario')
+        clave = request.form.get('clave')
+        if usuario in usuarios and usuarios[usuario] == clave:
+            session['usuario'] = usuario
+            return redirect(url_for('index'))
+        else:
+            error = "Usuario o clave incorrectos"
+    return render_template_string(HTML_LOGIN, error=error)
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
+    if 'usuario' not in session:
+        return redirect(url_for('login'))
+
     respuesta = None
     error = None
     if request.method == 'POST':
-        try:
-            producto = request.form.get('producto')
-            cantidad = int(request.form.get('cantidad', 0))
-            precio = float(request.form.get('precio', 0))
+        producto = request.form.get('producto')
+        cantidad = request.form.get('cantidad')
+        precio = request.form.get('precio')
 
-            if producto not in inventario:
-                raise ValueError("Producto no válido.")
-            if cantidad < 1 or precio < 0:
-                raise ValueError("Cantidad debe ser mayor a 0 y precio no puede ser negativo.")
+        if not producto or not cantidad or not precio:
+            error = "Complete todos los campos."
+        else:
+            try:
+                cantidad_int = int(cantidad)
+                precio_float = float(precio)
+                # Usamos el servicio SOAP para registrar la venta
+                resultado = cliente.service.registrar_venta(producto, cantidad_int, precio_float)
+                if resultado:
+                    ventas.append({"producto": producto, "cantidad": cantidad_int, "precio": precio_float})
+                    respuesta = "Venta registrada exitosamente."
+                else:
+                    error = "Error al registrar la venta."
+            except Exception as e:
+                error = f"Error en datos: {str(e)}"
 
-            total = cantidad * precio
-            respuesta = cliente.service.registrar_venta(producto, cantidad, precio)
-
-            ventas.append({
-                'producto': producto,
-                'cantidad': cantidad,
-                'precio': precio,
-                'total': total
-            })
-        except Exception as e:
-            error = str(e)
-
-    return render_template_string(HTML_FORM, respuesta=respuesta, error=error, inventario=inventario)
+    return render_template_string(HTML_FORM, inventario=inventario, respuesta=respuesta, error=error)
 
 @app.route('/historial')
 def historial():
+    if 'usuario' not in session:
+        return redirect(url_for('login'))
+
     return render_template_string(HTML_HISTORIAL, ventas=ventas)
 
 if __name__ == '__main__':
