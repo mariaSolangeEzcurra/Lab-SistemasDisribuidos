@@ -1,0 +1,1771 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GlusterFS - Análisis Técnico y Arquitectural</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@300;400;600;700&family=Source+Code+Pro:wght@400;500&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Source Sans Pro', sans-serif;
+            line-height: 1.6;
+            background: #f8fafc;
+            color: #2d3748;
+            overflow-x: hidden;
+        }
+
+        .slide {
+            min-height: 100vh;
+            padding: 80px 60px;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            position: relative;
+            page-break-after: always;
+            background: white;
+            margin: 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .slide:first-child {
+            background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 50%, #3b82f6 100%);
+            color: white;
+            text-align: center;
+            justify-content: center;
+        }
+
+        .slide h1 {
+            font-size: 3.5rem;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            color: #1e293b;
+            letter-spacing: -0.02em;
+        }
+
+        .slide:first-child h1 {
+            color: white;
+            font-size: 4rem;
+        }
+
+        .slide h2 {
+            font-size: 2.2rem;
+            font-weight: 600;
+            margin-bottom: 2.5rem;
+            color: #1e40af;
+            border-bottom: 3px solid #3b82f6;
+            padding-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+
+        .slide h3 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin: 1.5rem 0 1rem 0;
+            color: #374151;
+        }
+
+        .subtitle {
+            font-size: 1.4rem;
+            font-weight: 300;
+            opacity: 0.9;
+            margin-bottom: 2rem;
+        }
+
+        .section-number {
+            background: #3b82f6;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            margin-right: 15px;
+            font-size: 1.2rem;
+        }
+
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 3rem;
+            margin: 2.5rem 0;
+        }
+
+        .comparison-card {
+            background: #f8fafc;
+            padding: 2.5rem;
+            border-radius: 12px;
+            border: 2px solid #e5e7eb;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        }
+
+        .comparison-card.traditional {
+            border-left: 4px solid #ef4444;
+            background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+        }
+
+        .comparison-card.distributed {
+            border-left: 4px solid #10b981;
+            background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+        }
+
+        .svg-diagram {
+            margin: 2rem 0;
+            text-align: center;
+        }
+
+        .tech-specs {
+            background: #f1f5f9;
+            padding: 2rem;
+            border-radius: 8px;
+            margin: 2rem 0;
+            border-left: 4px solid #3b82f6;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin: 2.5rem 0;
+        }
+
+        .feature-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e5e7eb;
+            transition: transform 0.2s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        .feature-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .feature-icon {
+            width: 40px;
+            height: 40px;
+            margin-right: 12px;
+        }
+
+        .metrics-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 2rem 0;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .metrics-table th,
+        .metrics-table td {
+            padding: 15px 20px;
+            text-align: left;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .metrics-table th {
+            background: #f8fafc;
+            font-weight: 600;
+            color: #374151;
+        }
+
+        .pros-cons-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 3rem;
+            margin: 2rem 0;
+        }
+
+        .pros-card {
+            background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+            border: 2px solid #10b981;
+            border-radius: 12px;
+            padding: 2.5rem;
+        }
+
+        .cons-card {
+            background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+            border: 2px solid #ef4444;
+            border-radius: 12px;
+            padding: 2.5rem;
+        }
+
+        .checklist {
+            list-style: none;
+            margin: 1rem 0;
+        }
+
+        .checklist li {
+            padding: 0.8rem 0;
+            font-size: 1rem;
+            position: relative;
+            padding-left: 2rem;
+        }
+
+        .checklist.pros li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #10b981;
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+
+        .checklist.cons li:before {
+            content: "✗";
+            position: absolute;
+            left: 0;
+            color: #ef4444;
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+
+        .architecture-flow {
+            margin: 3rem 0;
+            text-align: center;
+        }
+
+        .final-summary {
+            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+            color: white;
+            padding: 3rem;
+            border-radius: 15px;
+            margin: 2rem 0;
+            text-align: center;
+        }
+
+        .code-snippet {
+            background: #1f2937;
+            color: #f9fafb;
+            padding: 1.5rem;
+            border-radius: 8px;
+            font-family: 'Source Code Pro', monospace;
+            margin: 1rem 0;
+            overflow-x: auto;
+            font-size: 0.9rem;
+        }
+
+        .highlight-stat {
+            background: #dbeafe;
+            color: #1e40af;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-weight: 600;
+            display: inline-block;
+            margin: 0.25rem;
+        }
+
+        .print-button {
+            position: fixed;
+            top: 25px;
+            right: 25px;
+            background: #1e40af;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            box-shadow: 0 4px 12px rgba(30, 64, 175, 0.3);
+            z-index: 1000;
+            font-family: 'Source Sans Pro', sans-serif;
+        }
+
+        .print-button:hover {
+            background: #1e3a8a;
+            transform: translateY(-1px);
+        }
+
+        @media print {
+            body { background: white; }
+            .slide { margin: 0; border: none; }
+            .print-button { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <button class="print-button" onclick="window.print()">Exportar a PDF</button>
+
+    <!-- Slide 1: Portada Ejecutiva -->
+    <div class="slide">
+        <h1>GlusterFS</h1>
+        <p class="subtitle">Sistema de Archivos Distribuido Escalable</p>
+        <p class="subtitle">Análisis Técnico y Arquitectural</p>
+        <div style="margin-top: 4rem; font-size: 1.1rem; opacity: 0.9;">
+            <strong>Open Source • Altamente Escalable • Tolerante a Fallos • Enterprise-Ready</strong>
+        </div>
+        <div style="margin-top: 2rem; font-size: 1rem; opacity: 0.8;">
+            Desarrollado por Red Hat | Licencia GNU GPL v3
+        </div>
+    </div>
+
+    <!-- Slide 2: Problemática Empresarial -->
+    <div class="slide">
+        <h2><span class="section-number">1</span>Problemática del Almacenamiento Tradicional</h2>
+        
+        <div class="svg-diagram">
+            <svg width="800" height="300" viewBox="0 0 800 300">
+                <!-- Servidor Tradicional -->
+                <g transform="translate(50, 50)">
+                    <rect x="0" y="0" width="300" height="200" fill="#fee2e2" stroke="#ef4444" stroke-width="2" rx="10"/>
+                    <text x="150" y="30" text-anchor="middle" font-weight="bold" font-size="16" fill="#dc2626">Almacenamiento Tradicional</text>
+                    
+                    <!-- Servidor físico -->
+                    <rect x="50" y="50" width="200" height="80" fill="#f3f4f6" stroke="#6b7280" stroke-width="1" rx="5"/>
+                    <text x="150" y="75" text-anchor="middle" font-size="12" fill="#374151">Servidor Único</text>
+                    <text x="150" y="95" text-anchor="middle" font-size="12" fill="#374151">Capacidad: 2TB</text>
+                    <text x="150" y="115" text-anchor="middle" font-size="12" fill="#374151">SPOF (Single Point of Failure)</text>
+                    
+                    <!-- Problemas -->
+                    <text x="20" y="160" font-size="12" fill="#dc2626">✗ Escalabilidad limitada</text>
+                    <text x="20" y="180" font-size="12" fill="#dc2626">✗ Punto único de falla</text>
+                </g>
+                
+                <!-- Arrow -->
+                <path d="M 380 150 L 420 150" stroke="#374151" stroke-width="2" marker-end="url(#arrowhead)"/>
+                <text x="400" y="140" text-anchor="middle" font-size="12" fill="#374151">vs</text>
+                
+                <!-- GlusterFS -->
+                <g transform="translate(450, 140)">
+                    <rect x="0" y="0" width="300" height="60" fill="#fefbf2" stroke="#f59e0b" rx="5"/>
+                    <text x="10" y="20" font-weight="bold" font-size="12" fill="#92400e">Entregables: Cluster funcional, benchmarks</text>
+                    <text x="10" y="35" font-size="10">• Validación de rendimiento vs SLAs</text>
+                    <text x="10" y="48" font-size="10">• Documentación de procedimientos</text>
+                </g>
+                
+                <!-- Phase 3 -->
+                <g transform="translate(120, 220)">
+                    <circle cx="-20" cy="10" r="8" fill="#f59e0b"/>
+                    <rect x="0" y="0" width="300" height="60" fill="#fefbf2" stroke="#f59e0b" rx="5"/>
+                    <text x="10" y="20" font-weight="bold" font-size="12" fill="#92400e">Fase 3: Implementación Producción (4-6 semanas)</text>
+                    <text x="10" y="35" font-size="10">• Deployment de cluster productivo</text>
+                    <text x="10" y="48" font-size="10">• Migración de datos críticos por fases</text>
+                </g>
+                
+                <g transform="translate(450, 220)">
+                    <rect x="0" y="0" width="300" height="60" fill="#fef2f2" stroke="#ef4444" rx="5"/>
+                    <text x="10" y="20" font-weight="bold" font-size="12" fill="#dc2626">Entregables: Cluster productivo, datos migrados</text>
+                    <text x="10" y="35" font-size="10">• Monitorización y alerting configurado</text>
+                    <text x="10" y="48" font-size="10">• Personal entrenado y certificado</text>
+                </g>
+            </svg>
+        </div>
+
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-header">
+                    <svg class="feature-icon" viewBox="0 0 24 24" fill="#3b82f6">
+                        <path d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                    </svg>
+                    <h3>Prerrequisitos Técnicos</h3>
+                </div>
+                <ul>
+                    <li>Mínimo 3 servidores con Linux (RHEL/CentOS recomendado)</li>
+                    <li>Red 10GbE dedicada para tráfico de cluster</li>
+                    <li>Discos dedicados para bricks (XFS recomendado)</li>
+                    <li>Sincronización NTP entre todos los nodos</li>
+                </ul>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-header">
+                    <svg class="feature-icon" viewBox="0 0 24 24" fill="#10b981">
+                        <path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+                    </svg>
+                    <h3>Capacitación Requerida</h3>
+                </div>
+                <ul>
+                    <li>Administración básica de GlusterFS (40 horas)</li>
+                    <li>Troubleshooting de sistemas distribuidos (24 horas)</li>
+                    <li>Monitorización y alerting (16 horas)</li>
+                    <li>Procedimientos de backup y recovery (16 horas)</li>
+                </ul>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-header">
+                    <svg class="feature-icon" viewBox="0 0 24 24" fill="#8b5cf6">
+                        <path d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"/>
+                    </svg>
+                    <h3>Inversión Estimada</h3>
+                </div>
+                <ul>
+                    <li><strong>Hardware (100TB):</strong> $80,000 - $120,000</li>
+                    <li><strong>Red 10GbE:</strong> $15,000 - $30,000</li>
+                    <li><strong>Servicios profesionales:</strong> $25,000 - $50,000</li>
+                    <li><strong>Capacitación:</strong> $8,000 - $15,000</li>
+                </ul>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-header">
+                    <svg class="feature-icon" viewBox="0 0 24 24" fill="#f59e0b">
+                        <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    <h3>Timeline Crítico</h3>
+                </div>
+                <ul>
+                    <li><strong>Semanas 1-4:</strong> Assessment y diseño</li>
+                    <li><strong>Semanas 5-8:</strong> Lab setup y testing</li>
+                    <li><strong>Semanas 9-14:</strong> Implementación producción</li>
+                    <li><strong>Semanas 15-16:</strong> Optimización y handover</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 12: Conclusiones y Recomendaciones -->
+    <div class="slide">
+        <h2><span class="section-number">11</span>Conclusiones Ejecutivas y Recomendaciones</h2>
+        
+        <div class="final-summary">
+            <h3>Resumen Ejecutivo</h3>
+            <p style="font-size: 1.2rem; line-height: 1.7; margin: 2rem 0;">
+                <strong>GlusterFS representa una solución estratégica</strong> para organizaciones que enfrentan crecimiento 
+                exponencial de datos y requieren escalabilidad masiva sin las limitaciones económicas y técnicas 
+                de las soluciones propietarias tradicionales.
+            </p>
+        </div>
+
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-header">
+                    <svg class="feature-icon" viewBox="0 0 24 24" fill="#10b981">
+                        <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    <h3>Valor de Negocio</h3>
+                </div>
+                <ul>
+                    <li><strong>ROI en 12-18 meses</strong> con ahorros del 40-70%</li>
+                    <li><strong>Escalabilidad ilimitada</strong> sin redesign arquitectural</li>
+                    <li><strong>Alta disponibilidad</strong> con SLA 99.9%+</li>
+                    <li><strong>Independencia tecnológica</strong> sin vendor lock-in</li>
+                </ul>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-header">
+                    <svg class="feature-icon" viewBox="0 0 24 24" fill="#3b82f6">
+                        <path d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                    </svg>
+                    <h3>Ventajas Técnicas</h3>
+                </div>
+                <ul>
+                    <li><strong>Arquitectura distribuida</strong> elimina puntos únicos de falla</li>
+                    <li><strong>Self-healing automático</strong> garantiza integridad de datos</li>
+                    <li><strong>Geo-replicación nativa</strong> para disaster recovery</li>
+                    <li><strong>Compatibilidad estándar</strong> con protocolos existentes</li>
+                </ul>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-header">
+                    <svg class="feature-icon" viewBox="0 0 24 24" fill="#f59e0b">
+                        <path d="M12 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-6 6 2 2 0 003 3h8a2 2 0 002-2V7a2 2 0 00-2-2H5z"/>
+                    </svg>
+                    <h3>Consideraciones Críticas</h3>
+                </div>
+                <ul>
+                    <li><strong>Red robusta requerida</strong> - 10GbE mínimo</li>
+                    <li><strong>Expertise técnico necesario</strong> - capacitación del equipo</li>
+                    <li><strong>Solo entornos Unix/Linux</strong> - limitación de plataforma</li>
+                    <li><strong>Planificación cuidadosa</strong> para migración sin downtime</li>
+                </ul>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-header">
+                    <svg class="feature-icon" viewBox="0 0 24 24" fill="#8b5cf6">
+                        <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                    </svg>
+                    <h3>Recomendación Estratégica</h3>
+                </div>
+                <ul>
+                    <li><strong>Iniciar con piloto</strong> de 50-100TB para validación</li>
+                    <li><strong>Invertir en capacitación</strong> antes de go-live</li>
+                    <li><strong>Planificar crecimiento</strong> por fases incrementales</li>
+                    <li><strong>Establecer partnership</strong> con integrador especializado</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="tech-specs">
+            <h3>Decisión Recomendada</h3>
+            <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 2rem; border-radius: 12px; text-align: center; margin: 2rem 0;">
+                <h3 style="color: white; margin-bottom: 1rem; font-size: 1.5rem;">PROCEDER CON IMPLEMENTACIÓN</h3>
+                <p style="font-size: 1.1rem; line-height: 1.6; margin: 1rem 0;">
+                    Para organizaciones con <strong>crecimiento de datos > 50% anual</strong>, infraestructura Linux, 
+                    y personal técnico competente, GlusterFS ofrece el <strong>mejor balance costo-beneficio</strong> 
+                    en el mercado de almacenamiento distribuido.
+                </p>
+                <div style="margin-top: 1.5rem; font-size: 1rem;">
+                    <strong>Próximo paso:</strong> Autorizar assessment técnico detallado y prueba de concepto
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 13: Recursos y Contactos -->
+    <div class="slide">
+        <h2><span class="section-number">12</span>Recursos Adicionales y Próximos Pasos</h2>
+        
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-header">
+                    <svg class="feature-icon" viewBox="0 0 24 24" fill="#3b82f6">
+                        <path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+                    </svg>
+                    <h3>Documentación Técnica</h3>
+                </div>
+                <ul>
+                    <li><strong>Documentación oficial:</strong> docs.gluster.org</li>
+                    <li><strong>Red Hat Customer Portal:</strong> Soporte empresarial</li>
+                    <li><strong>GitHub Repository:</strong> github.com/gluster/glusterfs</li>
+                    <li><strong>Comunidad:</strong> Foros y listas de correo activas</li>
+                </ul>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-header">
+                    <svg class="feature-icon" viewBox="0 0 24 24" fill="#10b981">
+                        <path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+                    </svg>
+                    <h3>Capacitación y Certificación</h3>
+                </div>
+                <ul>
+                    <li><strong>Red Hat Training:</strong> Cursos oficiales RH236</li>
+                    <li><strong>Linux Foundation:</strong> Capacitación open source</li>
+                    <li><strong>Webinars técnicos:</strong> Sesiones mensuales</li>
+                    <li><strong>Workshops hands-on:</strong> Experiencia práctica</li>
+                </ul>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-header">
+                    <svg class="feature-icon" viewBox="0 0 24 24" fill="#8b5cf6">
+                        <path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+                    </svg>
+                    <h3>Soporte Profesional</h3>
+                </div>
+                <ul>
+                    <li><strong>Red Hat Support:</strong> Soporte 24/7 enterprise</li>
+                    <li><strong>Partners certificados:</strong> Integradores especializados</li>
+                    <li><strong>Consulting services:</strong> Diseño e implementación</li>
+                    <li><strong>Managed services:</strong> Operación tercerizada</li>
+                </ul>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-header">
+                    <svg class="feature-icon" viewBox="0 0 24 24" fill="#f59e0b">
+                        <path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    <h3>Próximos Pasos</h3>
+                </div>
+                <ul>
+                    <li><strong>Assessment técnico:</strong> 2-3 semanas</li>
+                    <li><strong>Prueba de concepto:</strong> 4-6 semanas</li>
+                    <li><strong>Diseño detallado:</strong> 2-3 semanas</li>
+                    <li><strong>Implementación piloto:</strong> 6-8 semanas</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="final-summary">
+            <h3>¿Preguntas y Decisiones?</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 3rem; margin: 2rem 0;">
+                <div>
+                    <h4 style="color: #1e40af; margin-bottom: 1rem;">Preguntas Técnicas</h4>
+                    <ul style="list-style-type: none; padding-left: 0;">
+                        <li style="padding: 0.5rem 0;">❓ ¿Dudas sobre arquitectura y dimensionamiento?</li>
+                        <li style="padding: 0.5rem 0;">🔧 ¿Necesitas comparación detallada con alternativas?</li>
+                        <li style="padding: 0.5rem 0;">📊 ¿Quieres modelado financiero específico?</li>
+                        <li style="padding: 0.5rem 0;">🛠️ ¿Interés en prueba de concepto?</li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 style="color: #059669; margin-bottom: 1rem;">Acciones Recomendadas</h4>
+                    <ul style="list-style-type: none; padding-left: 0;">
+                        <li style="padding: 0.5rem 0;">✅ Autorizar assessment técnico inicial</li>
+                        <li style="padding: 0.5rem 0;">📅 Planificar workshop técnico con equipo</li>
+                        <li style="padding: 0.5rem 0;">💼 Contactar con partners certificados</li>
+                        <li style="padding: 0.5rem 0;">🎯 Definir criterios de éxito y timeline</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div style="text-align: center; margin-top: 3rem; padding: 2rem; background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); color: white; border-radius: 12px;">
+                <h3 style="color: white; margin-bottom: 1rem;">¡Gracias por su Atención!</h3>
+                <p style="font-size: 1.1rem;">
+                    <strong>¿Listos para construir su infraestructura de almacenamiento del futuro?</strong>
+                </p>
+                <div style="margin-top: 1rem; font-size: 1rem; opacity: 0.9;">
+                    GlusterFS: Escalable • Confiable • Open Source • Enterprise-Ready
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Enhanced navigation and print functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            const slides = document.querySelectorAll('.slide');
+            const totalSlides = slides.length;
+            
+            // Keyboard navigation
+            document.addEventListener('keydown', function(e) {
+                const currentSlide = Math.floor(window.scrollY / window.innerHeight);
+                
+                if (e.key === 'ArrowDown' || e.key === 'PageDown') {
+                    e.preventDefault();
+                    if (currentSlide < totalSlides - 1) {
+                        slides[currentSlide + 1].scrollIntoView({ behavior: 'smooth' });
+                    }
+                } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
+                    e.preventDefault();
+                    if (currentSlide > 0) {
+                        slides[currentSlide - 1].scrollIntoView({ behavior: 'smooth' });
+                    }
+                } else if (e.key === 'Home') {
+                    e.preventDefault();
+                    slides[0].scrollIntoView({ behavior: 'smooth' });
+                } else if (e.key === 'End') {
+                    e.preventDefault();
+                    slides[totalSlides - 1].scrollIntoView({ behavior: 'smooth' });
+                }
+            });
+            
+            // Print optimization
+            window.addEventListener('beforeprint', () => {
+                document.body.style.fontSize = '11pt';
+                document.body.style.lineHeight = '1.4';
+                document.querySelectorAll('.slide').forEach((slide, index) => {
+                    slide.style.breakBefore = index === 0 ? 'auto' : 'page';
+                    slide.style.height = 'auto';
+                    slide.style.minHeight = '95vh';
+                    slide.style.padding = '40px 30px';
+                });
+                document.querySelectorAll('.svg-diagram svg').forEach(svg => {
+                    svg.style.maxWidth = '100%';
+                    svg.style.height = 'auto';
+                });
+            });
+            
+            window.addEventListener('afterprint', () => {
+                location.reload(); // Reset styles after printing
+            });
+            
+            // Smooth scrolling for better navigation
+            let isScrolling = false;
+            window.addEventListener('wheel', function(e) {
+                if (isScrolling) return;
+                
+                const delta = e.deltaY;
+                const currentSlide = Math.floor(window.scrollY / window.innerHeight);
+                
+                if (Math.abs(delta) > 50) { // Threshold for slide change
+                    isScrolling = true;
+                    if (delta > 0 && currentSlide < totalSlides - 1) {
+                        slides[currentSlide + 1].scrollIntoView({ behavior: 'smooth' });
+                    } else if (delta < 0 && currentSlide > 0) {
+                        slides[currentSlide - 1].scrollIntoView({ behavior: 'smooth' });
+                    }
+                    
+                    setTimeout(() => { isScrolling = false; }, 1000);
+                }
+            }, { passive: true });
+        });
+    </script>
+</body>
+</html>50)">
+                    <rect x="0" y="0" width="300" height="200" fill="#dcfce7" stroke="#10b981" stroke-width="2" rx="10"/>
+                    <text x="150" y="30" text-anchor="middle" font-weight="bold" font-size="16" fill="#059669">GlusterFS Distribuido</text>
+                    
+                    <!-- Múltiples nodos -->
+                    <rect x="20" y="50" width="80" height="50" fill="#f3f4f6" stroke="#6b7280" stroke-width="1" rx="3"/>
+                    <text x="60" y="70" text-anchor="middle" font-size="10" fill="#374151">Nodo 1</text>
+                    <text x="60" y="85" text-anchor="middle" font-size="10" fill="#374151">2TB</text>
+                    
+                    <rect x="110" y="50" width="80" height="50" fill="#f3f4f6" stroke="#6b7280" stroke-width="1" rx="3"/>
+                    <text x="150" y="70" text-anchor="middle" font-size="10" fill="#374151">Nodo 2</text>
+                    <text x="150" y="85" text-anchor="middle" font-size="10" fill="#374151">2TB</text>
+                    
+                    <rect x="200" y="50" width="80" height="50" fill="#f3f4f6" stroke="#6b7280" stroke-width="1" rx="3"/>
+                    <text x="240" y="70" text-anchor="middle" font-size="10" fill="#374151">Nodo 3</text>
+                    <text x="240" y="85" text-anchor="middle" font-size="10" fill="#374151">2TB</text>
+                    
+                    <!-- Conexiones -->
+                    <line x1="100" y1="75" x2="110" y2="75" stroke="#3b82f6" stroke-width="2"/>
+                    <line x1="190" y1="75" x2="200" y2="75" stroke="#3b82f6" stroke-width="2"/>
+                    
+                    <!-- Ventajas -->
+                    <text x="20" y="130" font-size="12" fill="#059669">✓ Capacidad total: 6TB</text>
+                    <text x="20" y="150" font-size="12" fill="#059669">✓ Alta disponibilidad</text>
+                    <text x="20" y="170" font-size="12" fill="#059669">✓ Escalabilidad horizontal</text>
+                </g>
+                
+                <defs>
+                    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                        <polygon points="0 0, 10 3.5, 0 7" fill="#374151"/>
+                    </marker>
+                </defs>
+            </svg>
+        </div>
+
+        <div class="tech-specs">
+            <h3>Limitaciones del Almacenamiento Centralizado</h3>
+            <ul style="columns: 2; column-gap: 3rem; list-style-type: disc; margin-left: 2rem;">
+                <li>Escalabilidad vertical limitada</li>
+                <li>Alto costo de hardware especializado</li>
+                <li>Punto único de falla crítico</li>
+                <li>Cuello de botella en rendimiento</li>
+                <li>Complejidad en expansión de capacidad</li>
+                <li>Dependencia de proveedor único</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Slide 3: Arquitectura GlusterFS -->
+    <div class="slide">
+        <h2><span class="section-number">2</span>Arquitectura y Componentes Principales</h2>
+        
+        <div class="svg-diagram">
+            <svg width="900" height="400" viewBox="0 0 900 400">
+                <!-- Trusted Pool -->
+                <rect x="50" y="50" width="800" height="300" fill="none" stroke="#3b82f6" stroke-width="2" stroke-dasharray="5,5" rx="15"/>
+                <text x="450" y="35" text-anchor="middle" font-weight="bold" font-size="14" fill="#1e40af">Trusted Pool (Cluster)</text>
+                
+                <!-- Node 1 -->
+                <g transform="translate(80, 80)">
+                    <rect x="0" y="0" width="200" height="240" fill="#f8fafc" stroke="#64748b" stroke-width="2" rx="8"/>
+                    <text x="100" y="25" text-anchor="middle" font-weight="bold" font-size="12" fill="#1e293b">Node 1 (Server)</text>
+                    
+                    <!-- Brick 1.1 -->
+                    <rect x="20" y="40" width="160" height="60" fill="#dbeafe" stroke="#3b82f6" stroke-width="1" rx="4"/>
+                    <text x="100" y="60" text-anchor="middle" font-size="11" fill="#1e40af">Brick 1.1</text>
+                    <text x="100" y="75" text-anchor="middle" font-size="10" fill="#64748b">/data/brick1</text>
+                    <text x="100" y="90" text-anchor="middle" font-size="10" fill="#64748b">Capacity: 1TB</text>
+                    
+                    <!-- Brick 1.2 -->
+                    <rect x="20" y="110" width="160" height="60" fill="#dbeafe" stroke="#3b82f6" stroke-width="1" rx="4"/>
+                    <text x="100" y="130" text-anchor="middle" font-size="11" fill="#1e40af">Brick 1.2</text>
+                    <text x="100" y="145" text-anchor="middle" font-size="10" fill="#64748b">/data/brick2</text>
+                    <text x="100" y="160" text-anchor="middle" font-size="10" fill="#64748b">Capacity: 1TB</text>
+                    
+                    <!-- Network -->
+                    <rect x="20" y="180" width="160" height="30" fill="#f1f5f9" stroke="#64748b" stroke-width="1" rx="4"/>
+                    <text x="100" y="200" text-anchor="middle" font-size="10" fill="#64748b">TCP/IP Network Interface</text>
+                </g>
+                
+                <!-- Node 2 -->
+                <g transform="translate(350, 80)">
+                    <rect x="0" y="0" width="200" height="240" fill="#f8fafc" stroke="#64748b" stroke-width="2" rx="8"/>
+                    <text x="100" y="25" text-anchor="middle" font-weight="bold" font-size="12" fill="#1e293b">Node 2 (Server)</text>
+                    
+                    <rect x="20" y="40" width="160" height="60" fill="#dbeafe" stroke="#3b82f6" stroke-width="1" rx="4"/>
+                    <text x="100" y="60" text-anchor="middle" font-size="11" fill="#1e40af">Brick 2.1</text>
+                    <text x="100" y="75" text-anchor="middle" font-size="10" fill="#64748b">/data/brick1</text>
+                    <text x="100" y="90" text-anchor="middle" font-size="10" fill="#64748b">Capacity: 1TB</text>
+                    
+                    <rect x="20" y="110" width="160" height="60" fill="#dbeafe" stroke="#3b82f6" stroke-width="1" rx="4"/>
+                    <text x="100" y="130" text-anchor="middle" font-size="11" fill="#1e40af">Brick 2.2</text>
+                    <text x="100" y="145" text-anchor="middle" font-size="10" fill="#64748b">/data/brick2</text>
+                    <text x="100" y="160" text-anchor="middle" font-size="10" fill="#64748b">Capacity: 1TB</text>
+                    
+                    <rect x="20" y="180" width="160" height="30" fill="#f1f5f9" stroke="#64748b" stroke-width="1" rx="4"/>
+                    <text x="100" y="200" text-anchor="middle" font-size="10" fill="#64748b">TCP/IP Network Interface</text>
+                </g>
+                
+                <!-- Node 3 -->
+                <g transform="translate(620, 80)">
+                    <rect x="0" y="0" width="200" height="240" fill="#f8fafc" stroke="#64748b" stroke-width="2" rx="8"/>
+                    <text x="100" y="25" text-anchor="middle" font-weight="bold" font-size="12" fill="#1e293b">Node 3 (Server)</text>
+                    
+                    <rect x="20" y="40" width="160" height="60" fill="#dbeafe" stroke="#3b82f6" stroke-width="1" rx="4"/>
+                    <text x="100" y="60" text-anchor="middle" font-size="11" fill="#1e40af">Brick 3.1</text>
+                    <text x="100" y="75" text-anchor="middle" font-size="10" fill="#64748b">/data/brick1</text>
+                    <text x="100" y="90" text-anchor="middle" font-size="10" fill="#64748b">Capacity: 1TB</text>
+                    
+                    <rect x="20" y="110" width="160" height="60" fill="#dbeafe" stroke="#3b82f6" stroke-width="1" rx="4"/>
+                    <text x="100" y="130" text-anchor="middle" font-size="11" fill="#1e40af">Brick 3.2</text>
+                    <text x="100" y="145" text-anchor="middle" font-size="10" fill="#64748b">/data/brick2</text>
+                    <text x="100" y="160" text-anchor="middle" font-size="10" fill="#64748b">Capacity: 1TB</text>
+                    
+                    <rect x="20" y="180" width="160" height="30" fill="#f1f5f9" stroke="#64748b" stroke-width="1" rx="4"/>
+                    <text x="100" y="200" text-anchor="middle" font-size="10" fill="#64748b">TCP/IP Network Interface</text>
+                </g>
+                
+                <!-- Network connections -->
+                <line x1="280" y1="280" x2="350" y2="280" stroke="#10b981" stroke-width="3"/>
+                <line x1="550" y1="280" x2="620" y2="280" stroke="#10b981" stroke-width="3"/>
+                
+                <!-- Volume abstraction -->
+                <rect x="200" y="360" width="500" height="30" fill="#dcfce7" stroke="#10b981" stroke-width="2" rx="15"/>
+                <text x="450" y="380" text-anchor="middle" font-weight="bold" font-size="12" fill="#059669">Unified Volume: /mnt/glusterfs (Total Capacity: 6TB)</text>
+            </svg>
+        </div>
+
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-header">
+                    <svg class="feature-icon" viewBox="0 0 24 24" fill="#3b82f6">
+                        <path d="M4 6a2 2 0 012-2h8a2 2 0 012 2v7a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 15c0 .55.45 1 1 1h2a2 2 0 002-2V6a2 2 0 00-2-2h-2c-.55 0-1 .45-1 1v8z"/>
+                    </svg>
+                    <h3>Nodes (Nodos)</h3>
+                </div>
+                <p>Servidores físicos o virtuales que forman parte del cluster. Mínimo 3 nodos recomendados para alta disponibilidad.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-header">
+                    <svg class="feature-icon" viewBox="0 0 24 24" fill="#10b981">
+                        <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>
+                    </svg>
+                    <h3>Bricks (Ladrillos)</h3>
+                </div>
+                <p>Unidades básicas de almacenamiento. Cada brick corresponde a un directorio exportado desde un sistema de archivos local.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-header">
+                    <svg class="feature-icon" viewBox="0 0 24 24" fill="#8b5cf6">
+                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                    </svg>
+                    <h3>Volumes (Volúmenes)</h3>
+                </div>
+                <p>Abstracción lógica que combina múltiples bricks en una unidad de almacenamiento unificada accesible por clientes.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-header">
+                    <svg class="feature-icon" viewBox="0 0 24 24" fill="#f59e0b">
+                        <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
+                    </svg>
+                    <h3>Trusted Pool</h3>
+                </div>
+                <p>Conjunto de nodos con confianza mutua que pueden comunicarse y compartir almacenamiento de forma segura.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 4: Tipos de Volúmenes -->
+    <div class="slide">
+        <h2><span class="section-number">3</span>Tipos de Volúmenes y Estrategias de Distribución</h2>
+        
+        <div class="svg-diagram">
+            <svg width="900" height="350" viewBox="0 0 900 350">
+                <!-- Distributed Volume -->
+                <g transform="translate(50, 20)">
+                    <rect x="0" y="0" width="250" height="150" fill="#f0f9ff" stroke="#0ea5e9" stroke-width="2" rx="8"/>
+                    <text x="125" y="25" text-anchor="middle" font-weight="bold" font-size="14" fill="#0c4a6e">Distributed Volume</text>
+                    
+                    <!-- Files distribution -->
+                    <rect x="20" y="40" width="60" height="30" fill="#bae6fd" stroke="#0ea5e9" rx="4"/>
+                    <text x="50" y="58" text-anchor="middle" font-size="10">File A</text>
+                    
+                    <rect x="95" y="40" width="60" height="30" fill="#bae6fd" stroke="#0ea5e9" rx="4"/>
+                    <text x="125" y="58" text-anchor="middle" font-size="10">File B</text>
+                    
+                    <rect x="170" y="40" width="60" height="30" fill="#bae6fd" stroke="#0ea5e9" rx="4"/>
+                    <text x="200" y="58" text-anchor="middle" font-size="10">File C</text>
+                    
+                    <!-- Bricks -->
+                    <rect x="20" y="80" width="60" height="25" fill="#e0f2fe" stroke="#0369a1" rx="3"/>
+                    <text x="50" y="96" text-anchor="middle" font-size="9">Brick 1</text>
+                    
+                    <rect x="95" y="80" width="60" height="25" fill="#e0f2fe" stroke="#0369a1" rx="3"/>
+                    <text x="125" y="96" text-anchor="middle" font-size="9">Brick 2</text>
+                    
+                    <rect x="170" y="80" width="60" height="25" fill="#e0f2fe" stroke="#0369a1" rx="3"/>
+                    <text x="200" y="96" text-anchor="middle" font-size="9">Brick 3</text>
+                    
+                    <text x="125" y="125" text-anchor="middle" font-size="11" fill="#0c4a6e">Capacidad: Suma de todos los bricks</text>
+                    <text x="125" y="140" text-anchor="middle" font-size="11" fill="#0c4a6e">Tolerancia a fallos: Ninguna</text>
+                </g>
+                
+                <!-- Replicated Volume -->
+                <g transform="translate(350, 20)">
+                    <rect x="0" y="0" width="250" height="150" fill="#f0fdf4" stroke="#22c55e" stroke-width="2" rx="8"/>
+                    <text x="125" y="25" text-anchor="middle" font-weight="bold" font-size="14" fill="#15803d">Replicated Volume</text>
+                    
+                    <!-- Files replication -->
+                    <rect x="50" y="40" width="60" height="30" fill="#bbf7d0" stroke="#22c55e" rx="4"/>
+                    <text x="80" y="58" text-anchor="middle" font-size="10">File A</text>
+                    
+                    <rect x="140" y="40" width="60" height="30" fill="#bbf7d0" stroke="#22c55e" rx="4"/>
+                    <text x="170" y="58" text-anchor="middle" font-size="10">File A</text>
+                    
+                    <!-- Bricks -->
+                    <rect x="50" y="80" width="60" height="25" fill="#dcfce7" stroke="#16a34a" rx="3"/>
+                    <text x="80" y="96" text-anchor="middle" font-size="9">Brick 1</text>
+                    
+                    <rect x="140" y="80" width="60" height="25" fill="#dcfce7" stroke="#16a34a" rx="3"/>
+                    <text x="170" y="96" text-anchor="middle" font-size="9">Brick 2</text>
+                    
+                    <!-- Replication arrow -->
+                    <path d="M 110 55 L 140 55" stroke="#22c55e" stroke-width="2" marker-end="url(#arrowgreen)"/>
+                    <text x="125" y="50" text-anchor="middle" font-size="9" fill="#15803d">Replica</text>
+                    
+                    <text x="125" y="125" text-anchor="middle" font-size="11" fill="#15803d">Capacidad: Tamaño del brick más pequeño</text>
+                    <text x="125" y="140" text-anchor="middle" font-size="11" fill="#15803d">Tolerancia a fallos: N-1 nodos</text>
+                </g>
+                
+                <!-- Distributed-Replicated Volume -->
+                <g transform="translate(200, 200)">
+                    <rect x="0" y="0" width="350" height="130" fill="#fefbf2" stroke="#f59e0b" stroke-width="2" rx="8"/>
+                    <text x="175" y="25" text-anchor="middle" font-weight="bold" font-size="14" fill="#92400e">Distributed-Replicated Volume</text>
+                    
+                    <!-- Group 1 -->
+                    <rect x="20" y="40" width="120" height="60" fill="#fef3c7" stroke="#f59e0b" stroke-width="1" rx="4"/>
+                    <text x="80" y="55" text-anchor="middle" font-size="10" fill="#92400e">Replica Set 1</text>
+                    
+                    <rect x="30" y="65" width="40" height="20" fill="#fed7aa" stroke="#ea580c" rx="2"/>
+                    <text x="50" y="78" text-anchor="middle" font-size="8">Brick 1</text>
+                    
+                    <rect x="80" y="65" width="40" height="20" fill="#fed7aa" stroke="#ea580c" rx="2"/>
+                    <text x="100" y="78" text-anchor="middle" font-size="8">Brick 2</text>
+                    
+                    <!-- Group 2 -->
+                    <rect x="160" y="40" width="120" height="60" fill="#fef3c7" stroke="#f59e0b" stroke-width="1" rx="4"/>
+                    <text x="220" y="55" text-anchor="middle" font-size="10" fill="#92400e">Replica Set 2</text>
+                    
+                    <rect x="170" y="65" width="40" height="20" fill="#fed7aa" stroke="#ea580c" rx="2"/>
+                    <text x="190" y="78" text-anchor="middle" font-size="8">Brick 3</text>
+                    
+                    <rect x="220" y="65" width="40" height="20" fill="#fed7aa" stroke="#ea580c" rx="2"/>
+                    <text x="240" y="78" text-anchor="middle" font-size="8">Brick 4</text>
+                    
+                    <text x="175" y="115" text-anchor="middle" font-size="11" fill="#92400e">Combina distribución y replicación para máxima escalabilidad y disponibilidad</text>
+                </g>
+                
+                <defs>
+                    <marker id="arrowgreen" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                        <polygon points="0 0, 8 3, 0 6" fill="#22c55e"/>
+                    </marker>
+                </defs>
+            </svg>
+        </div>
+
+        <table class="metrics-table">
+            <thead>
+                <tr>
+                    <th>Tipo de Volumen</th>
+                    <th>Capacidad Efectiva</th>
+                    <th>Tolerancia a Fallos</th>
+                    <th>Caso de Uso Ideal</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Distributed</strong></td>
+                    <td>Suma total de bricks</td>
+                    <td>Ninguna</td>
+                    <td>Máximo almacenamiento, archivos no críticos</td>
+                </tr>
+                <tr>
+                    <td><strong>Replicated</strong></td>
+                    <td>Tamaño del brick menor</td>
+                    <td>N-1 fallos de nodo</td>
+                    <td>Alta disponibilidad, datos críticos</td>
+                </tr>
+                <tr>
+                    <td><strong>Distributed-Replicated</strong></td>
+                    <td>(Suma de bricks) / Factor de réplica</td>
+                    <td>Múltiples fallos por grupo</td>
+                    <td>Escenarios empresariales complejos</td>
+                </tr>
+                <tr>
+                    <td><strong>Dispersed (Erasure Code)</strong></td>
+                    <td>~75% de capacidad total</td>
+                    <td>Configurable (K+M)</td>
+                    <td>Eficiencia de almacenamiento con redundancia</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Slide 5: Escalabilidad y Rendimiento -->
+    <div class="slide">
+        <h2><span class="section-number">4</span>Escalabilidad y Métricas de Rendimiento</h2>
+        
+        <div class="svg-diagram">
+            <svg width="900" height="300" viewBox="0 0 900 300">
+                <!-- Scaling Timeline -->
+                <line x1="100" y1="250" x2="800" y2="250" stroke="#64748b" stroke-width="2"/>
+                
+                <!-- Stage 1: Small -->
+                <g transform="translate(150, 80)">
+                    <circle cx="0" cy="170" r="5" fill="#3b82f6"/>
+                    <line x1="0" y1="170" x2="0" y2="250" stroke="#3b82f6" stroke-width="2" stroke-dasharray="3,3"/>
+                    
+                    <rect x="-40" y="0" width="80" height="120" fill="#f8fafc" stroke="#64748b" rx="6"/>
+                    <text x="0" y="20" text-anchor="middle" font-size="12" font-weight="bold">Inicio</text>
+                    <text x="0" y="40" text-anchor="middle" font-size="10">3 Nodos</text>
+                    <text x="0" y="55" text-anchor="middle" font-size="10">6 Bricks</text>
+                    <text x="0" y="70" text-anchor="middle" font-size="10">6TB Total</text>
+                    <text x="0" y="90" text-anchor="middle" font-size="10" fill="#3b82f6">Throughput:</text>
+                    <text x="0" y="105" text-anchor="middle" font-size="10" fill="#3b82f6">300 MB/s</text>
+                </g>
+                
+                <!-- Stage 2: Medium -->
+                <g transform="translate(350, 60)">
+                    <circle cx="0" cy="190" r="5" fill="#10b981"/>
+                    <line x1="0" y1="190" x2="0" y2="250" stroke="#10b981" stroke-width="2" stroke-dasharray="3,3"/>
+                    
+                    <rect x="-40" y="0" width="80" height="140" fill="#f0fdf4" stroke="#64748b" rx="6"/>
+                    <text x="0" y="20" text-anchor="middle" font-size="12" font-weight="bold">Crecimiento</text>
+                    <text x="0" y="40" text-anchor="middle" font-size="10">8 Nodos</text>
+                    <text x="0" y="55" text-anchor="middle" font-size="10">16 Bricks</text>
+                    <text x="0" y="70" text-anchor="middle" font-size="10">32TB Total</text>
+                    <text x="0" y="90" text-anchor="middle" font-size="10" fill="#10b981">Throughput:</text>
+                    <text x="0" y="105" text-anchor="middle" font-size="10" fill="#10b981">1.2 GB/s</text>
+                    <text x="0" y="125" text-anchor="middle" font-size="9" fill="#059669">+300% capacidad</text>
+                </g>
+                
+                <!-- Stage 3: Large -->
+                <g transform="translate(550, 40)">
+                    <circle cx="0" cy="210" r="5" fill="#f59e0b"/>
+                    <line x1="0" y1="210" x2="0" y2="250" stroke="#f59e0b" stroke-width="2" stroke-dasharray="3,3"/>
+                    
+                    <rect x="-40" y="0" width="80" height="160" fill="#fffbeb" stroke="#64748b" rx="6"/>
+                    <text x="0" y="20" text-anchor="middle" font-size="12" font-weight="bold">Empresa</text>
+                    <text x="0" y="40" text-anchor="middle" font-size="10">20 Nodos</text>
+                    <text x="0" y="55" text-anchor="middle" font-size="10">40 Bricks</text>
+                    <text x="0" y="70" text-anchor="middle" font-size="10">200TB Total</text>
+                    <text x="0" y="90" text-anchor="middle" font-size="10" fill="#f59e0b">Throughput:</text>
+                    <text x="0" y="105" text-anchor="middle" font-size="10" fill="#f59e0b">4.5 GB/s</text>
+                    <text x="0" y="125" text-anchor="middle" font-size="9" fill="#d97706">Geo-replicación</text>
+                    <text x="0" y="140" text-anchor="middle" font-size="9" fill="#d97706">Multi-sitio</text>
+                </g>
+                
+                <!-- Stage 4: Massive -->
+                <g transform="translate(750, 20)">
+                    <circle cx="0" cy="230" r="5" fill="#dc2626"/>
+                    <line x1="0" y1="230" x2="0" y2="250" stroke="#dc2626" stroke-width="2" stroke-dasharray="3,3"/>
+                    
+                    <rect x="-40" y="0" width="80" height="180" fill="#fef2f2" stroke="#64748b" rx="6"/>
+                    <text x="0" y="20" text-anchor="middle" font-size="12" font-weight="bold">Enterprise</text>
+                    <text x="0" y="40" text-anchor="middle" font-size="10">100+ Nodos</text>
+                    <text x="0" y="55" text-anchor="middle" font-size="10">500+ Bricks</text>
+                    <text x="0" y="70" text-anchor="middle" font-size="10">5+ Petabytes</text>
+                    <text x="0" y="90" text-anchor="middle" font-size="10" fill="#dc2626">Throughput:</text>
+                    <text x="0" y="105" text-anchor="middle" font-size="10" fill="#dc2626">50+ GB/s</text>
+                    <text x="0" y="125" text-anchor="middle" font-size="9" fill="#b91c1c">Global clusters</text>
+                    <text x="0" y="140" text-anchor="middle" font-size="9" fill="#b91c1c">Hybrid cloud</text>
+                    <text x="0" y="155" text-anchor="middle" font-size="9" fill="#b91c1c">Tier storage</text>
+                </g>
+                
+                <!-- Timeline labels -->
+                <text x="150" y="270" text-anchor="middle" font-size="11" fill="#64748b">3-6 meses</text>
+                <text x="350" y="270" text-anchor="middle" font-size="11" fill="#64748b">1-2 años</text>
+                <text x="550" y="270" text-anchor="middle" font-size="11" fill="#64748b">3-5 años</text>
+                <text x="750" y="270" text-anchor="middle" font-size="11" fill="#64748b">5+ años</text>
+            </svg>
+        </div>
+
+        <div class="features-grid">
+            <div class="feature-card">
+                <h3>Escalabilidad Horizontal</h3>
+                <div class="highlight-stat">Hasta 1000+ nodos</div>
+                <p>Adición de nodos en caliente sin interrupción del servicio. Escalamiento lineal del rendimiento y capacidad.</p>
+            </div>
+            
+            <div class="feature-card">
+                <h3>Capacidad Máxima</h3>
+                <div class="highlight-stat">Varios Petabytes</div>
+                <p>Sin límites arquitecturales rígidos. Limitado únicamente por hardware y red disponible.</p>
+            </div>
+            
+            <div class="feature-card">
+                <h3>Rendimiento Agregado</h3>
+                <div class="highlight-stat">50+ GB/s throughput</div>
+                <p>Escalamiento paralelo del I/O. Múltiples clientes pueden acceder simultáneamente sin degradación.</p>
+            </div>
+            
+            <div class="feature-card">
+                <h3>Tiempo de Implementación</h3>
+                <div class="highlight-stat">< 4 horas setup</div>
+                <p>Configuración inicial rápida. Expansión incremental sin planificación extensiva de downtime.</p>
+            </div>
+        </div>
+
+        <div class="tech-specs">
+            <h3>Especificaciones Técnicas de Escalabilidad</h3>
+            <div style="columns: 2; column-gap: 3rem;">
+                <p><strong>Número máximo de bricks por volumen:</strong> 2048</p>
+                <p><strong>Número máximo de nodos por cluster:</strong> Sin límite teórico</p>
+                <p><strong>Tamaño máximo de archivo:</strong> 16TB (con ext4), sin límite (con XFS)</p>
+                <p><strong>Número máximo de archivos por brick:</strong> Limitado por filesystem subyacente</p>
+                <p><strong>Latencia adicional por distribución:</strong> < 1ms en LAN</p>
+                <p><strong>Overhead de metadatos:</strong> < 2% del espacio total</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 6: Seguridad y Redundancia -->
+    <div class="slide">
+        <h2><span class="section-number">5</span>Seguridad y Estrategias de Redundancia</h2>
+        
+        <div class="svg-diagram">
+            <svg width="900" height="280" viewBox="0 0 900 280">
+                <!-- Geo-replication setup -->
+                <g transform="translate(50, 20)">
+                    <!-- Site A -->
+                    <rect x="0" y="0" width="300" height="120" fill="#f0f9ff" stroke="#0ea5e9" stroke-width="2" rx="10"/>
+                    <text x="150" y="25" text-anchor="middle" font-weight="bold" font-size="14" fill="#0c4a6e">Site A - Madrid (Master)</text>
+                    
+                    <!-- Master cluster -->
+                    <rect x="20" y="40" width="80" height="60" fill="#bae6fd" stroke="#0369a1" rx="5"/>
+                    <text x="60" y="60" text-anchor="middle" font-size="10">Master</text>
+                    <text x="60" y="75" text-anchor="middle" font-size="10">Cluster</text>
+                    <text x="60" y="90" text-anchor="middle" font-size="9">Active R/W</text>
+                    
+                    <!-- Security features -->
+                    <rect x="120" y="40" width="160" height="60" fill="#e0f2fe" stroke="#0369a1" rx="5"/>
+                    <text x="200" y="55" text-anchor="middle" font-size="10" font-weight="bold">Seguridad</text>
+                    <text x="130" y="70" font-size="9">• SSL/TLS encryption</text>
+                    <text x="130" y="82" font-size="9">• SSH tunneling</text>
+                    <text x="130" y="94" font-size="9">• Access control lists</text>
+                </g>
+                
+                <!-- Replication arrow -->
+                <g transform="translate(400, 80)">
+                    <path d="M 0 0 L 100 0" stroke="#10b981" stroke-width="4" marker-end="url(#arrowbig)"/>
+                    <text x="50" y="-10" text-anchor="middle" font-size="12" font-weight="bold" fill="#059669">Geo-Replication</text>
+                    <text x="50" y="20" text-anchor="middle" font-size="10" fill="#059669">SSH + rsync</text>
+                    <text x="50" y="35" text-anchor="middle" font-size="10" fill="#059669">Asíncrono</text>
+                </g>
+                
+                <!-- Site B -->
+                <g transform="translate(550, 20)">
+                    <rect x="0" y="0" width="300" height="120" fill="#f0fdf4" stroke="#22c55e" stroke-width="2" rx="10"/>
+                    <text x="150" y="25" text-anchor="middle" font-weight="bold" font-size="14" fill="#15803d">Site B - Barcelona (Slave)</text>
+                    
+                    <!-- Slave cluster -->
+                    <rect x="200" y="40" width="80" height="60" fill="#bbf7d0" stroke="#16a34a" rx="5"/>
+                    <text x="240" y="60" text-anchor="middle" font-size="10">Slave</text>
+                    <text x="240" y="75" text-anchor="middle" font-size="10">Cluster</text>
+                    <text x="240" y="90" text-anchor="middle" font-size="9">Read-only</text>
+                    
+                    <!-- Disaster recovery -->
+                    <rect x="20" y="40" width="160" height="60" fill="#dcfce7" stroke="#16a34a" rx="5"/>
+                    <text x="100" y="55" text-anchor="middle" font-size="10" font-weight="bold">DR Features</text>
+                    <text x="30" y="70" font-size="9">• Automatic failover</text>
+                    <text x="30" y="82" font-size="9">• Data integrity checks</text>
+                    <text x="30" y="94" font-size="9">• Bandwidth throttling</text>
+                </g>
+                
+                <!-- Local replication example -->
+                <g transform="translate(200, 160)">
+                    <rect x="0" y="0" width="500" height="100" fill="#fefbf2" stroke="#f59e0b" stroke-width="2" rx="10"/>
+                    <text x="250" y="25" text-anchor="middle" font-weight="bold" font-size="14" fill="#92400e">Redundancia Local (RAID-like)</text>
+                    
+                    <!-- Original -->
+                    <rect x="50" y="40" width="80" height="40" fill="#fef3c7" stroke="#d97706" rx="4"/>
+                    <text x="90" y="55" text-anchor="middle" font-size="10">Data</text>
+                    <text x="90" y="70" text-anchor="middle" font-size="10">Original</text>
+                    
+                    <!-- Mirror 1 -->
+                    <rect x="160" y="40" width="80" height="40" fill="#fef3c7" stroke="#d97706" rx="4"/>
+                    <text x="200" y="55" text-anchor="middle" font-size="10">Replica 1</text>
+                    <text x="200" y="70" text-anchor="middle" font-size="10">Node 2</text>
+                    
+                    <!-- Mirror 2 -->
+                    <rect x="270" y="40" width="80" height="40" fill="#fef3c7" stroke="#d97706" rx="4"/>
+                    <text x="310" y="55" text-anchor="middle" font-size="10">Replica 2</text>
+                    <text x="310" y="70" text-anchor="middle" font-size="10">Node 3</text>
+                    
+                    <!-- Self-healing -->
+                    <rect x="380" y="40" width="100" height="40" fill="#fed7aa" stroke="#ea580c" rx="4"/>
+                    <text x="430" y="55" text-anchor="middle" font-size="10">Self-Healing</text>
+                    <text x="430" y="70" text-anchor="middle" font-size="10">Automático</text>
+                    
+                    <!-- Sync arrows -->
+                    <path d="M 130 60 L 160 60" stroke="#d97706" stroke-width="2" marker-end="url(#arroworange)"/>
+                    <path d="M 240 60 L 270 60" stroke="#d97706" stroke-width="2" marker-end="url(#arroworange)"/>
+                </g>
+                
+                <defs>
+                    <marker id="arrowbig" markerWidth="12" markerHeight="8" refX="10" refY="4" orient="auto">
+                        <polygon points="0 0, 12 4, 0 8" fill="#10b981"/>
+                    </marker>
+                    <marker id="arroworange" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                        <polygon points="0 0, 8 3, 0 6" fill="#d97706"/>
+                    </marker>
+                </defs>
+            </svg>
+        </div>
+
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-header">
+                    <svg class="feature-icon" viewBox="0 0 24 24" fill="#3b82f6">
+                        <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
+                    </svg>
+                    <h3>Encriptación de Datos</h3>
+                </div>
+                <ul>
+                    <li>SSL/TLS para transferencia</li>
+                    <li>Encriptación en tránsito y reposo</li>
+                    <li>Claves rotativas automáticas</li>
+                </ul>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-header">
+                    <svg class="feature-icon" viewBox="0 0 24 24" fill="#10b981">
+                        <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    <h3>Self-Healing</h3>
+                </div>
+                <ul>
+                    <li>Detección automática de corrupción</li>
+                    <li>Reparación transparente de datos</li>
+                    <li>Verificación de integridad continua</li>
+                </ul>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-header">
+                    <svg class="feature-icon" viewBox="0 0 24 24" fill="#8b5cf6">
+                        <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                    </svg>
+                    <h3>Control de Acceso</h3>
+                </div>
+                <ul>
+                    <li>ACLs granulares por usuario/grupo</li>
+                    <li>Autenticación centralizada</li>
+                    <li>Auditoría de accesos</li>
+                </ul>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-header">
+                    <svg class="feature-icon" viewBox="0 0 24 24" fill="#f59e0b">
+                        <path d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064"/>
+                    </svg>
+                    <h3>Geo-Replicación</h3>
+                </div>
+                <ul>
+                    <li>Replicación multi-sitio</li>
+                    <li>Sincronización asíncrona</li>
+                    <li>Failover automático entre sitios</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="tech-specs">
+            <h3>Configuraciones de Seguridad Recomendadas</h3>
+            <div class="code-snippet">
+# Configuración de volumen replicado seguro
+gluster volume create secure-vol replica 3 transport tcp \
+  node1:/data/brick1 node2:/data/brick1 node3:/data/brick1
+
+# Habilitación de encriptación
+gluster volume set secure-vol encryption on
+gluster volume set secure-vol encryption.client-mode true
+
+# Configuración de geo-replicación
+gluster volume geo-replication secure-vol madrid::backup-vol create push-pem
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 7: Casos de Uso Empresariales -->
+    <div class="slide">
+        <h2><span class="section-number">6</span>Casos de Uso y Aplicaciones Empresariales</h2>
+        
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-header">
+                    <svg class="feature-icon" viewBox="0 0 24 24" fill="#3b82f6">
+                        <path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+                    </svg>
+                    <h3>Empresas Multinacionales</h3>
+                </div>
+                <p><strong>Escenario:</strong> Corporación con oficinas en Madrid, Barcelona y Valencia.</p>
+                <ul>
+                    <li>Almacenamiento unificado de documentos corporativos</li>
+                    <li>Sincronización automática entre ubicaciones</li>
+                    <li>Acceso local rápido desde cualquier oficina</li>
+                    <li>Backup distribuido automático</li>
+                </ul>
+                <div class="highlight-stat">ROI: 40% reducción en costos de almacenamiento</div>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-header">
+                    <svg class="feature-icon" viewBox="0 0 24 24" fill="#10b981">
+                        <path d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2h4a1 1 0 011 1v2a1 1 0 01-1 1h-1v10a2 2 0 01-2 2H6a2 2 0 01-2-2V8H3a1 1 0 01-1-1V5a1 1 0 011-1h4zM9 3v1h6V3H9zm0 5v8h6V8H9z"/>
+                    </svg>
+                    <h3>Medios y Entretenimiento</h3>
+                </div>
+                <p><strong>Escenario:</strong> Estudio de postproducción de video 4K/8K.</p>
+                <ul>
+                    <li>Almacenamiento masivo de assets multimedia</li>
+                    <li>Acceso simultáneo de múltiples editores</li>
+                    <li>Rendimiento sostenido para streaming de video</li>
+                    <li>Archivado automático de proyectos finalizados</li>
+                </ul>
+                <div class="highlight-stat">Capacidad: 500TB+ con acceso a 8GB/s</div>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-header">
+                    <svg class="feature-icon" viewBox="0 0 24 24" fill="#8b5cf6">
+                        <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                    </svg>
+                    <h3>Investigación Científica</h3>
+                </div>
+                <p><strong>Escenario:</strong> Centro de investigación biomédica con simulaciones.</p>
+                <ul>
+                    <li>Datasets masivos de simulaciones y resultados</li>
+                    <li>Colaboración internacional de investigadores</li>
+                    <li>Procesamiento distribuido de big data</li>
+                    <li>Retención de datos para compliance regulatorio</li>
+                </ul>
+                <div class="highlight-stat">Escalabilidad: De 10TB a 5PB en 3 años</div>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-header">
+                    <svg class="feature-icon" viewBox="0 0 24 24" fill="#f59e0b">
+                        <path d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"/>
+                    </svg>
+                    <h3>Proveedores de Servicios Cloud</h3>
+                </div>
+                <p><strong>Escenario:</strong> ISP ofreciendo servicios de backup y hosting.</p>
+                <ul>
+                    <li>Infraestructura multi-tenant escalable</li>
+                    <li>SLA de 99.9% uptime garantizado</li>
+                    <li>Facturación por uso con escalado automático</li>
+                    <li>Integración con APIs de gestión</li>
+                </ul>
+                <div class="highlight-stat">Eficiencia: 60% menos CAPEX vs soluciones propietarias</div>
+            </div>
+        </div>
+
+        <div class="comparison-grid">
+            <div class="tech-specs">
+                <h3>Métricas de Implementación por Sector</h3>
+                <table style="width: 100%; font-size: 0.9rem;">
+                    <tr style="background: #f8fafc;">
+                        <th style="padding: 8px; text-align: left;">Sector</th>
+                        <th style="padding: 8px;">Capacidad Típica</th>
+                        <th style="padding: 8px;">Nodos</th>
+                        <th style="padding: 8px;">Throughput</th>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px;">Finanzas</td>
+                        <td style="padding: 8px;">50-200TB</td>
+                        <td style="padding: 8px;">6-12</td>
+                        <td style="padding: 8px;">2-5 GB/s</td>
+                    </tr>
+                    <tr style="background: #f8fafc;">
+                        <td style="padding: 8px;">Healthcare</td>
+                        <td style="padding: 8px;">100-1PB</td>
+                        <td style="padding: 8px;">12-50</td>
+                        <td style="padding: 8px;">5-15 GB/s</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px;">Medios</td>
+                        <td style="padding: 8px;">500TB-5PB</td>
+                        <td style="padding: 8px;">20-100</td>
+                        <td style="padding: 8px;">10-50 GB/s</td>
+                    </tr>
+                    <tr style="background: #f8fafc;">
+                        <td style="padding: 8px;">Research</td>
+                        <td style="padding: 8px;">1-10PB</td>
+                        <td style="padding: 8px;">50-200</td>
+                        <td style="padding: 8px;">20-100 GB/s</td>
+                    </tr>
+                </table>
+            </div>
+            
+            <div class="tech-specs">
+                <h3>Factores Críticos de Éxito</h3>
+                <ul style="list-style-type: none; padding-left: 0;">
+                    <li style="padding: 0.5rem 0; border-bottom: 1px solid #e5e7eb;">
+                        <strong>Red de Datos:</strong> Mínimo 10 Gigabit Ethernet entre nodos
+                    </li>
+                    <li style="padding: 0.5rem 0; border-bottom: 1px solid #e5e7eb;">
+                        <strong>Hardware:</strong> Servidores commodity con redundancia en PSU y discos
+                    </li>
+                    <li style="padding: 0.5rem 0; border-bottom: 1px solid #e5e7eb;">
+                        <strong>Monitorización:</strong> Alertas proactivas de salud del cluster
+                    </li>
+                    <li style="padding: 0.5rem 0; border-bottom: 1px solid #e5e7eb;">
+                        <strong>Respaldo:</strong> Estrategia 3-2-1 con geo-replicación
+                    </li>
+                    <li style="padding: 0.5rem 0;">
+                        <strong>Personal:</strong> Administradores con certificación Linux/Storage
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 8: Análisis Comparativo -->
+    <div class="slide">
+        <h2><span class="section-number">7</span>Análisis Comparativo de Soluciones</h2>
+        
+        <table class="metrics-table">
+            <thead>
+                <tr>
+                    <th>Característica</th>
+                    <th>GlusterFS</th>
+                    <th>Ceph</th>
+                    <th>BeeGFS</th>
+                    <th>StorageSpaces Direct</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Licencia</strong></td>
+                    <td>GNU GPL v3 (Open Source)</td>
+                    <td>LGPL v2.1 (Open Source)</td>
+                    <td>BeeGFS EULA (Gratis)</td>
+                    <td>Propietaria (Microsoft)</td>
+                </tr>
+                <tr>
+                    <td><strong>Complejidad de Implementación</strong></td>
+                    <td>Baja-Media</td>
+                    <td>Alta</td>
+                    <td>Baja</td>
+                    <td>Media</td>
+                </tr>
+                <tr>
+                    <td><strong>Escalabilidad</strong></td>
+                    <td>Excelente (1000+ nodos)</td>
+                    <td>Excelente (1000+ nodos)</td>
+                    <td>Excelente (HPC optimizado)</td>
+                    <td>Buena (64 nodos máx)</td>
+                </tr>
+                <tr>
+                    <td><strong>Rendimiento</strong></td>
+                    <td>Alto</td>
+                    <td>Muy Alto</td>
+                    <td>Extremo (HPC)</td>
+                    <td>Alto</td>
+                </tr>
+                <tr>
+                    <td><strong>Tipos de Almacenamiento</strong></td>
+                    <td>File Storage</td>
+                    <td>Object, Block, File</td>
+                    <td>File (paralelo)</td>
+                    <td>Block, File</td>
+                </tr>
+                <tr>
+                    <td><strong>Plataformas Soportadas</strong></td>
+                    <td>Linux, Unix</td>
+                    <td>Linux, algunas Unix</td>
+                    <td>Linux, Windows</td>
+                    <td>Windows Server únicamente</td>
+                </tr>
+                <tr>
+                    <td><strong>Curva de Aprendizaje</strong></td>
+                    <td>Moderada</td>
+                    <td>Pronunciada</td>
+                    <td>Suave</td>
+                    <td>Moderada (si conoces MS)</td>
+                </tr>
+                <tr>
+                    <td><strong>Ecosistema/Comunidad</strong></td>
+                    <td>Maduro (Red Hat)</td>
+                    <td>Muy Maduro (Ceph Foundation)</td>
+                    <td>Especializada (Fraunhofer)</td>
+                    <td>Corporativo (Microsoft)</td>
+                </tr>
+                <tr>
+                    <td><strong>Caso de Uso Ideal</strong></td>
+                    <td>Empresas, file sharing</td>
+                    <td>Cloud providers, DevOps</td>
+                    <td>HPC, científico</td>
+                    <td>Entornos Microsoft puros</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="svg-diagram">
+            <svg width="900" height="200" viewBox="0 0 900 200">
+                <!-- Radar chart for comparison -->
+                <g transform="translate(450, 100)">
+                    <!-- Grid -->
+                    <circle cx="0" cy="0" r="20" fill="none" stroke="#e5e7eb" stroke-width="1"/>
+                    <circle cx="0" cy="0" r="40" fill="none" stroke="#e5e7eb" stroke-width="1"/>
+                    <circle cx="0" cy="0" r="60" fill="none" stroke="#e5e7eb" stroke-width="1"/>
+                    <circle cx="0" cy="0" r="80" fill="none" stroke="#e5e7eb" stroke-width="1"/>
+                    
+                    <!-- Axes -->
+                    <line x1="0" y1="-80" x2="0" y2="80" stroke="#e5e7eb" stroke-width="1"/>
+                    <line x1="-80" y1="0" x2="80" y2="0" stroke="#e5e7eb" stroke-width="1"/>
+                    <line x1="-57" y1="-57" x2="57" y2="57" stroke="#e5e7eb" stroke-width="1"/>
+                    <line x1="57" y1="-57" x2="-57" y2="57" stroke="#e5e7eb" stroke-width="1"/>
+                    
+                    <!-- Labels -->
+                    <text x="0" y="-90" text-anchor="middle" font-size="10" fill="#64748b">Rendimiento</text>
+                    <text x="90" y="5" text-anchor="start" font-size="10" fill="#64748b">Escalabilidad</text>
+                    <text x="0" y="100" text-anchor="middle" font-size="10" fill="#64748b">Facilidad</text>
+                    <text x="-90" y="5" text-anchor="end" font-size="10" fill="#64748b">Ecosistema</text>
+                    
+                    <!-- GlusterFS -->
+                    <polygon points="0,-60 60,-20 0,65 -50,10" fill="rgba(59, 130, 246, 0.3)" stroke="#3b82f6" stroke-width="2"/>
+                    
+                    <!-- Ceph (comparison) -->
+                    <polygon points="0,-75 70,-15 0,40 -60,15" fill="rgba(16, 185, 129, 0.2)" stroke="#10b981" stroke-width="2" stroke-dasharray="5,5"/>
+                    
+                    <!-- Legend -->
+                    <g transform="translate(120, -60)">
+                        <rect x="0" y="0" width="150" height="80" fill="white" stroke="#e5e7eb" rx="5"/>
+                        <text x="10" y="20" font-size="12" font-weight="bold">Comparativa</text>
+                        <line x1="10" y1="30" x2="30" y2="30" stroke="#3b82f6" stroke-width="2"/>
+                        <text x="35" y="35" font-size="10">GlusterFS</text>
+                        <line x1="10" y1="45" x2="30" y2="45" stroke="#10b981" stroke-width="2" stroke-dasharray="3,3"/>
+                        <text x="35" y="50" font-size="10">Ceph</text>
+                        <text x="10" y="70" font-size="9" fill="#64748b">Escala: 0-80 puntos</text>
+                    </g>
+                </g>
+            </svg>
+        </div>
+    </div>
+
+    <!-- Slide 9: Ventajas y Desventajas -->
+    <div class="slide">
+        <h2><span class="section-number">8</span>Análisis de Ventajas y Limitaciones</h2>
+        
+        <div class="pros-cons-grid">
+            <div class="pros-card">
+                <h3 style="color: #059669; margin-bottom: 1.5rem;">✓ Ventajas Competitivas</h3>
+                <ul class="checklist pros">
+                    <li><strong>Escalabilidad Horizontal Nativa:</strong> Crecimiento lineal de capacidad y rendimiento añadiendo nodos</li>
+                    <li><strong>Alta Disponibilidad sin SPOF:</strong> Múltiples copias de datos distribuidas geográficamente</li>
+                    <li><strong>Hardware Commodity:</strong> Funciona en servidores estándar, reduciendo CAPEX en 40-60%</li>
+                    <li><strong>Transparencia para Aplicaciones:</strong> Compatible con protocolos estándar (NFS, SMB/CIFS)</li>
+                    <li><strong>Self-Healing Automático:</strong> Detección y reparación de corrupción de datos sin intervención</li>
+                    <li><strong>Flexibilidad de Configuración:</strong> Múltiples tipos de volúmenes para diferentes casos de uso</li>
+                    <li><strong>Open Source Maduro:</strong> Sin vendor lock-in, respaldado por Red Hat</li>
+                    <li><strong>Geo-Replicación Integrada:</strong> Backup y DR automático entre datacenters</li>
+                </ul>
+            </div>
+            
+            <div class="cons-card">
+                <h3 style="color: #dc2626; margin-bottom: 1.5rem;">✗ Limitaciones y Consideraciones</h3>
+                <ul class="checklist cons">
+                    <li><strong>Dependencia de Red:</strong> Requiere infraestructura de red robusta (10GbE mínimo recomendado)</li>
+                    <li><strong>Complejidad Operacional:</strong> Requiere expertise en administración de sistemas distribuidos</li>
+                    <li><strong>Overhead de Metadatos:</strong> Consumo adicional de espacio para información de distribución (1-3%)</li>
+                    <li><strong>Latencia de Red:</strong> Incremento marginal de latency vs almacenamiento local</li>
+                    <li><strong>Limitación de Plataforma:</strong> Sólo sistemas Unix/Linux (FUSE dependency)</li>
+                    <li><strong>Curva de Aprendizaje:</strong> Personal técnico requiere capacitación especializada</li>
+                    <li><strong>Complejidad de Troubleshooting:</strong> Diagnóstico de problemas en sistemas distribuidos</li>
+                    <li><strong>Consistencia Eventual:</strong> En configuraciones geo-replicadas, datos no siempre inmediatamente consistentes</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="tech-specs">
+            <h3>Análisis Costo-Beneficio</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 1rem;">
+                <div>
+                    <h4 style="color: #059669; margin-bottom: 1rem;">Ahorros Típicos</h4>
+                    <ul style="list-style-type: disc; margin-left: 1.5rem;">
+                        <li><strong>Hardware:</strong> 40-60% vs arrays dedicados</li>
+                        <li><strong>Licencias:</strong> $0 vs $50K-500K+ soluciones propietarias</li>
+                        <li><strong>Mantenimiento:</strong> 30-50% reducción en costos anuales</li>
+                        <li><strong>Escalabilidad:</strong> Crecimiento incremental vs grandes compras</li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 style="color: #dc2626; margin-bottom: 1rem;">Inversiones Requeridas</h4>
+                    <ul style="list-style-type: disc; margin-left: 1.5rem;">
+                        <li><strong>Red:</strong> Infraestructura 10GbE+ ($10K-50K)</li>
+                        <li><strong>Personal:</strong> Capacitación y certificación ($5K-15K)</li>
+                        <li><strong>Monitorización:</strong> Herramientas y alerting ($2K-10K)</li>
+                        <li><strong>Consultoría:</strong> Implementación inicial ($10K-50K)</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 10: Criterios de Adopción -->
+    <div class="slide">
+        <h2><span class="section-number">9</span>Criterios de Evaluación para Adopción</h2>
+        
+        <div class="comparison-grid">
+            <div class="comparison-card distributed">
+                <h3>✓ Adoptar GlusterFS Si:</h3>
+                <div style="margin: 1.5rem 0;">
+                    <div style="margin-bottom: 1rem;">
+                        <strong style="color: #059669;">Requisitos de Crecimiento</strong>
+                        <ul style="margin-top: 0.5rem; font-size: 0.9rem;">
+                            <li>Crecimiento anual de datos > 50%</li>
+                            <li>Necesidad de escalamiento a petabytes</li>
+                            <li>Presupuesto de expansión limitado</li>
+                        </ul>
+                    </div>
+                    
+                    <div style="margin-bottom: 1rem;">
+                        <strong style="color: #059669;">Infraestructura Técnica</strong>
+                        <ul style="margin-top: 0.5rem; font-size: 0.9rem;">
+                            <li>Entorno predominantemente Linux/Unix</li>
+                            <li>Red 10GbE+ disponible o planificada</li>
+                            <li>Múltiples ubicaciones geográficas</li>
+                        </ul>
+                    </div>
+                    
+                    <div style="margin-bottom: 1rem;">
+                        <strong style="color: #059669;">Capacidades Organizacionales</strong>
+                        <ul style="margin-top: 0.5rem; font-size: 0.9rem;">
+                            <li>Equipo con expertise en sistemas distribuidos</li>
+                            <li>Cultura de adopción open source</li>
+                            <li>Procesos de monitorización maduros</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="comparison-card traditional">
+                <h3>✗ Considerar Alternativas Si:</h3>
+                <div style="margin: 1.5rem 0;">
+                    <div style="margin-bottom: 1rem;">
+                        <strong style="color: #dc2626;">Limitaciones del Entorno</strong>
+                        <ul style="margin-top: 0.5rem; font-size: 0.9rem;">
+                            <li>Infraestructura 100% Windows</li>
+                            <li>Red legacy con ancho de banda limitado</li>
+                            <li>Necesidades simples < 10TB</li>
+                        </ul>
+                    </div>
+                    
+                    <div style="margin-bottom: 1rem;">
+                        <strong style="color: #dc2626;">Restricciones Operacionales</strong>
+                        <ul style="margin-top: 0.5rem; font-size: 0.9rem;">
+                            <li>Personal con expertise limitado</li>
+                            <li>Políticas anti-open source</li>
+                            <li>Requerimientos de latencia < 1ms</li>
+                        </ul>
+                    </div>
+                    
+                    <div style="margin-bottom: 1rem;">
+                        <strong style="color: #dc2626;">Casos de Uso Específicos</strong>
+                        <ul style="margin-top: 0.5rem; font-size: 0.9rem;">
+                            <li>Bases de datos transaccionales de alta frecuencia</li>
+                            <li>Aplicaciones que requieren block storage nativo</li>
+                            <li>Cumplimiento regulatorio estricto</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tech-specs">
+            <h3>Framework de Evaluación ROI</h3>
+            <table style="width: 100%; margin: 1rem 0;">
+                <thead style="background: #f1f5f9;">
+                    <tr>
+                        <th style="padding: 12px; text-align: left;">Métrica</th>
+                        <th style="padding: 12px;">Almacenamiento Tradicional</th>
+                        <th style="padding: 12px;">GlusterFS</th>
+                        <th style="padding: 12px;">Ahorro</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td style="padding: 8px; font-weight: 600;">CAPEX Inicial (100TB)</td>
+                        <td style="padding: 8px;">$200,000 - $500,000</td>
+                        <td style="padding: 8px;">$80,000 - $150,000</td>
+                        <td style="padding: 8px; color: #059669; font-weight: 600;">60-70%</td>
+                    </tr>
+                    <tr style="background: #f8fafc;">
+                        <td style="padding: 8px; font-weight: 600;">OPEX Anual</td>
+                        <td style="padding: 8px;">$40,000 - $100,000</td>
+                        <td style="padding: 8px;">$15,000 - $35,000</td>
+                        <td style="padding: 8px; color: #059669; font-weight: 600;">60-65%</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; font-weight: 600;">Tiempo de Implementación</td>
+                        <td style="padding: 8px;">2-6 meses</td>
+                        <td style="padding: 8px;">2-8 semanas</td>
+                        <td style="padding: 8px; color: #059669; font-weight: 600;">75%</td>
+                    </tr>
+                    <tr style="background: #f8fafc;">
+                        <td style="padding: 8px; font-weight: 600;">Escalabilidad (500TB)</td>
+                        <td style="padding: 8px;">Forklift upgrade</td>
+                        <td style="padding: 8px;">Incremental</td>
+                        <td style="padding: 8px; color: #059669; font-weight: 600;">Infinita</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="final-summary">
+            <h3>Recomendación Estratégica</h3>
+            <p style="font-size: 1.1rem; line-height: 1.6; margin: 1rem 0;">
+                <strong>GlusterFS es la elección óptima para organizaciones que:</strong> buscan escalabilidad masiva sin vendor lock-in, 
+                operan en entornos Linux, tienen crecimiento de datos acelerado, y cuentan con personal técnico competente 
+                para gestionar infraestructura distribuida.
+            </p>
+            <div style="margin-top: 1.5rem; font-size: 1rem;">
+                <strong>ROI típico:</strong> Recuperación de inversión en 12-18 meses | <strong>Ahorro acumulado:</strong> 40-70% a 3 años
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 11: Hoja de Ruta de Implementación -->
+    <div class="slide">
+        <h2><span class="section-number">10</span>Hoja de Ruta de Implementación</h2>
+        
+        <div class="svg-diagram">
+            <svg width="900" height="350" viewBox="0 0 900 350">
+                <!-- Timeline -->
+                <line x1="100" y1="50" x2="100" y2="300" stroke="#3b82f6" stroke-width="4"/>
+                
+                <!-- Phase 1 -->
+                <g transform="translate(120, 60)">
+                    <circle cx="-20" cy="10" r="8" fill="#3b82f6"/>
+                    <rect x="0" y="0" width="300" height="60" fill="#f0f9ff" stroke="#3b82f6" rx="5"/>
+                    <text x="10" y="20" font-weight="bold" font-size="12" fill="#1e40af">Fase 1: Evaluación y Diseño (2-4 semanas)</text>
+                    <text x="10" y="35" font-size="10">• Assessment de infraestructura actual</text>
+                    <text x="10" y="48" font-size="10">• Diseño de arquitectura y dimensionamiento</text>
+                </g>
+                
+                <!-- Phase 2 -->
+                <g transform="translate(450, 60)">
+                    <rect x="0" y="0" width="300" height="60" fill="#f0fdf4" stroke="#10b981" rx="5"/>
+                    <text x="10" y="20" font-weight="bold" font-size="12" fill="#15803d">Entregables: Arquitectura definida, HW specs</text>
+                    <text x="10" y="35" font-size="10">• Plan de migración detallado</text>
+                    <text x="10" y="48" font-size="10">• Análisis de riesgos y contingencias</text>
+                </g>
+                
+                <!-- Phase 2 -->
+                <g transform="translate(120, 140)">
+                    <circle cx="-20" cy="10" r="8" fill="#10b981"/>
+                    <rect x="0" y="0" width="300" height="60" fill="#f0fdf4" stroke="#10b981" rx="5"/>
+                    <text x="10" y="20" font-weight="bold" font-size="12" fill="#15803d">Fase 2: Laboratorio y Pruebas (3-4 semanas)</text>
+                    <text x="10" y="35" font-size="10">• Setup de cluster de pruebas</text>
+                    <text x="10" y="48" font-size="10">• Testing de carga y failover scenarios</text>
+                </g>
+                
+                <g transform="translate(450, 140)">
+                    <rect x="0" y="0" width="300" height="60" fill="#f0fdf4" stroke="#10b981" rx="5"/>
+                    <text x="10" y="20" font-weight="bold" font-size="12" fill="#15803d">Entregables: Reporte de pruebas, ajustes de configuración</text>
+                    <text x="10" y="35" font-size="10">• Validación de rendimiento y resiliencia</text>
+                    <text x="10" y="48" font-size="10">• Documentación de procesos</text>
