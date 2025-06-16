@@ -1,0 +1,32 @@
+# Dependencias para Sistema de Transacciones Distribuidas
+# ======================================================
+
+# Framework web
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+
+# Base de datos
+psycopg[binary,pool]==3.1.13
+psycopg-pool==3.2.0
+
+# Validación de datos
+pydantic==2.5.0
+pydantic[email]==2.5.0
+
+# Utilidades
+python-multipart==0.0.6
+jinja2==3.1.2
+
+# Logging y monitoreo
+structlog==23.2.0
+
+# Desarrollo y testing (opcional)
+pytest==7.4.3
+pytest-asyncio==0.21.1
+httpx==0.25.2
+
+# Variables de entorno
+python-dotenv==1.0.0
+
+# UUID y utilidades adicionales
+uuid==1.30

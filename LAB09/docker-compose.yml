@@ -1,0 +1,172 @@
+# Docker Compose para Sistema de Transacciones Distribuidas
+# Versión robusta sin dependencias de archivos externos
+# ========================================================
+version: '3.8'
+
+services:
+  # Base de datos para Orders
+  orders_db:
+    image: postgres:15-alpine
+    container_name: orders_database
+    environment:
+      POSTGRES_DB: orders_db
+      POSTGRES_USER: orders_user
+      POSTGRES_PASSWORD: orders_pass
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8"
+    volumes:
+      - ./init-scripts/orders_init.sql:/docker-entrypoint-initdb.d/01-orders-init.sql:ro
+      - orders_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - distributed_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orders_user -d orders_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  # Base de datos para Payments
+  payments_db:
+    image: postgres:15-alpine
+    container_name: payments_database
+    environment:
+      POSTGRES_DB: payments_db
+      POSTGRES_USER: payments_user
+      POSTGRES_PASSWORD: payments_pass
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8"
+    volumes:
+      - ./init-scripts/payments_init.sql:/docker-entrypoint-initdb.d/01-payments-init.sql:ro
+      - payments_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    networks:
+      - distributed_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U payments_user -d payments_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  # Aplicación principal
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: distributed_transactions_app
+    ports:
+      - "8000:8000"
+    depends_on:
+      orders_db:
+        condition: service_healthy
+      payments_db:
+        condition: service_healthy
+    environment:
+      # Variables de conexión a base de datos
+      - ORDERS_DB_URL=postgresql://orders_user:orders_pass@orders_db:5432/orders_db
+      - PAYMENTS_DB_URL=postgresql://payments_user:payments_pass@payments_db:5432/payments_db
+      - DOCKER_ENV=true
+      
+      # Variables de aplicación
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=INFO
+      
+      # Variables de FastAPI
+      - FASTAPI_ENV=production
+    networks:
+      - distributed_network
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Monitor de bases de datos (pgAdmin) - OPCIONAL
+  pgadmin:
+    image: dpage/pgadmin4:7.8
+    container_name: pgadmin_monitor
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@distributed-transactions.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
+    ports:
+      - "8080:80"
+    depends_on:
+      - orders_db
+      - payments_db
+    networks:
+      - distributed_network
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+  # Redis para caching - OPCIONAL
+  redis:
+    image: redis:7-alpine
+    container_name: redis_cache
+    ports:
+      - "6379:6379"
+    networks:
+      - distributed_network
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --requirepass redis123
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    profiles:
+      - caching
+
+  # Grafana para monitoreo - OPCIONAL
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: grafana_monitor
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_USERS_ALLOW_SIGN_UP=false
+    networks:
+      - distributed_network
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - app
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+networks:
+  distributed_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+          gateway: 172.20.0.1
+
+volumes:
+  orders_data:
+    driver: local
+  payments_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+  redis_data:
+    driver: local
+  grafana_data:
+    driver: local
