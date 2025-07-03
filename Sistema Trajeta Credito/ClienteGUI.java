@@ -12,7 +12,7 @@ public class ClienteGUI extends JFrame {
 
     public ClienteGUI() {
         try {
-            servicio = (TarjetaRemota) Naming.lookup("rmi://localhost/TarjetaService");
+            servicio = (TarjetaRemota) Naming.lookup("rmi://localhost/Tarjeta");
         } catch (Exception e) {
             JOptionPane.showMessageDialog(this, "Error conectando con el servicio RMI: " + e.getMessage());
             System.exit(1);
