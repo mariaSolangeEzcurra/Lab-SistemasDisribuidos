@@ -11,6 +11,7 @@ public class TarjetaRemotaImpl extends UnicastRemoteObject implements TarjetaRem
     private Random random;
 
     public TarjetaRemotaImpl() throws RemoteException {
+        super(0);
         tarjetas = new HashMap<>();
         random = new Random();
     }
